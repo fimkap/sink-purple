@@ -1,6 +1,7 @@
 /* Kitchen Sink */
 $(document).ready(function() {
     /* use code like this to sepcifiy a particular codec. */
+    /*
      Phono.util.filterWideband = function(offer, wideband) {
         var codecs = new Array();
         Phono.util.each(offer, function() {
@@ -16,6 +17,7 @@ $(document).ready(function() {
         });
         return codecs;
     };   
+    */
    /**/ 
 
     var phonos={}, calls={}, chats={};
@@ -35,13 +37,12 @@ $(document).ready(function() {
         var audioType = $('.audio-plugin').val();
         var directP2P = false;
         var connectionUrl = window.location.protocol+"//app.phono.com/http-bind";
-        var dialString = "app:9996160714";
+        var dialString = "sip:3366@login.zipdx.com";
         var chatString = "en2fr@bot.talk.google.com";
-        var gw = "gw-v3.d.phono.com";
+        var gw = "gw-v4.d.phono.com";
         
         if (connectionUrl.indexOf("file:") == 0){
-            connectionUrl = "http://panda-dev2-ext.qa.voxeolabs.net:8080/prism_bosh";
-            //connectionUrl = "http://app.phono.com/http-bind";
+            connectionUrl = "http://app.phono.com/http-bind";
         }
 
         // Do we have URL parameters to override here?
@@ -63,6 +64,12 @@ $(document).ready(function() {
         var audio = audioType;
         var protocol = "sip:";
         if (audioType == "webrtc") protocol = "xmpp:";
+
+        if (audioType == "flash") {
+            gw = "gw-v3.d.phono.com";
+            audio = "flash";
+            directP2P = false;
+        }
 
         if (audioType == "panda") {
             gw = "gw-v4.d.phono.com";
