@@ -21,6 +21,7 @@ $(document).ready(function() {
    /**/ 
 
     var phonos={}, calls={}, chats={};
+    var appdialstring = "sip:9990081544@sip.tropo.com";
     
     function urlParam(name){
 	var results = new RegExp('[\\?&]' + name + '=([^&#]*)').exec(window.location.href);
@@ -50,6 +51,9 @@ $(document).ready(function() {
         if (urlParam("connectionUrl") != undefined) connectionUrl = urlParam("connectionUrl");
         if (urlParam("dial") != undefined) dialString = urlParam("dial");
         if (urlParam("chat") != undefined) chatString = urlParam("chat");
+        
+        // Take purple pal
+        //if (urlParam("username") != undefined) purplepal = urlParam("username");
 
         console.log("audioType = " + audioType);
         console.log("dialString = " + dialString);
@@ -91,6 +95,13 @@ $(document).ready(function() {
                                                     + "&chat=" + this.sessionId + "'>" 
                                                     + this.sessionId + "</a>");
                 newPhonoDiv.find(".phoneControl").show();
+
+                // Call backend server to sign in
+                //$.get("http://87.69.174.80:8080/sign", { name: purplepal, sid: this.sessionId },
+                //    function(data) {
+                //        alert("Data Loaded: " + data);
+                //    });
+                // test TODO
 
                 if (this.audio.audioInDevices){
                     var inList = this.audio.audioInDevices();
@@ -177,7 +188,7 @@ $(document).ready(function() {
     }
     
     //Creates a new call
-    function createNewCall(phonoID, to){
+    function createNewCall(phonoID, to, purplepal){
 	//clone a call box
 	var phonoDiv = $("#"+phonoID);
 	
@@ -192,6 +203,11 @@ $(document).ready(function() {
 	console.log("["+phonoDiv.attr('id')+"] ["+newCallID+"] Calling "+to);
 	
 	calls[newCallID] = phonos[phonoID].phone.dial(to, {
+        headers: [ 
+        {
+            name:"x-username",
+            value: purplepal
+        }],
 	    tones: true,
 	    pushToTalk: pttEnabled,
             onAnswer: function(event) {
@@ -362,8 +378,10 @@ $(document).ready(function() {
     
     $('.call').live('click', function() {
 	var thisPhono = $(this).closest(".phono").attr("id");
-	var callTo = $.trim($("#"+thisPhono).find(".callTo").val());
-	createNewCall(thisPhono, callTo);
+	//var callTo = $.trim($("#"+thisPhono).find(".callTo").val());
+	var purplepal = $.trim($("#"+thisPhono).find(".callTo").val());
+    //alert("id " + thisPhono + "callto " + appdialstring + "pal " + purplepal);
+	createNewCall(thisPhono, appdialstring, purplepal);
     });
     
     $('.headset').live('change', function() {
@@ -503,6 +521,15 @@ $(document).ready(function() {
 	    .prependTo("body");
     }
 
+    // TODO uncomment
     createNewPhono();
+    // test TODO
+    //$.get("http://192.168.1.15:8080/sign", { name: "tom", sid: "555" },
+    //$.get("http://192.168.1.15/index.json",
+    //    function(data) {
+    //        alert("Data Loaded: " + data.tropo);
+    //    },
+    //    "json");
+     
 });
 
