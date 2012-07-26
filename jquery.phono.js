@@ -651,9 +651,12 @@ var flensed={base_path:"//s.phono.com/deps/flensed/1.0/"};
 
    // Define defualt config and merge from constructor
    this.config = Phono.util.extend({
-      gateway: "gw-v3.d.phono.com",
+      gateway: "gw-v4.d.phono.com",
       connectionUrl: window.location.protocol+"//app.phono.com/http-bind"
    }, config);
+   if (this.config.connectionUrl.indexOf("file:")==0){
+      this.config.connectionUrl = "https://app.phono.com/http-bind";
+   }
 
    // Bind 'on' handlers
    Phono.events.bind(this, config);
@@ -671,6 +674,7 @@ var flensed={base_path:"//s.phono.com/deps/flensed/1.0/"};
    
    // Initialize Fields
    this.sessionId = null;
+   Phono.log.debug("ConnectionUrl: " + this.config.connectionUrl);
    this.connection = new Strophe.Connection(this.config.connectionUrl);
    if(navigator.appName.indexOf('Internet Explorer')>0){
     xmlSerializer = {};
@@ -1130,7 +1134,7 @@ var flensed={base_path:"//s.phono.com/deps/flensed/1.0/"};
 
    
    // Global
-   Phono.version = "0.3";
+   Phono.version = "0.4";
    
    Phono.log = new PhonoLogger();
    
@@ -1166,7 +1170,7 @@ var flensed={base_path:"//s.phono.com/deps/flensed/1.0/"};
                  || status === Strophe.Status.AUTHFAIL) {
             phono.handleError();
           }
-      });
+      },50);
    };
 
    Phono.prototype.disconnect = function() {
@@ -3537,6 +3541,14 @@ Strophe.Connection.prototype = {
             // setup timeout handler
             this._disconnectTimeout = this._addSysTimedHandler(
                 30000, this._onDisconnectTimeout.bind(this));
+                
+            // remove all of the requests
+            if (this._requests.length > 0) {
+            	for (var i=0; i<this._requests.length; i++) {
+        			this._removeRequest(this._requests[i]);
+            	}
+        	}
+                
             this._sendTerminate();
         }
     },
@@ -4909,7 +4921,11 @@ function FlashAudio(phono, config, callback) {
     
     // Define defualt config and merge from constructor
     this.config = Phono.util.extend({
-        swf: "//s.phono.com/releases/" + Phono.version + "/plugins/audio/phono.audio.swf"
+        protocol: "rtmfp",
+        swf: "//s.phono.com/releases/" + Phono.version + "/plugins/audio/phono.audio.swf",
+        cirrus: "rtmfp://phono-fms1-ext.voxeolabs.net/phono",
+        direct: true,
+        video: false
     }, config);
     
     // Bind Event Listeners
@@ -4940,11 +4956,21 @@ function FlashAudio(phono, config, callback) {
         plugin.$flash = this.create("Wrapper").getAudio();
         plugin.$flash.addEventListener(null, function(event) {
             var eventName = (event.getType()+"");
-            Phono.events.trigger(plugin, eventName);
+            Phono.events.trigger(plugin, eventName, {
+                reason: event.getReason()
+            });
+            if (eventName == "mediaError") {
+                Phono.events.trigger(phono, "error", {
+                    reason: event.getReason()
+                });
+            }
         });
         callback(plugin);
+        if (plugin.config.direct) {
+            window.setTimeout(10, plugin.$flash.doCirrusConnect(plugin.config.cirrus));
+        }
     });
-    
+
     wmodeSetting = "opaque";
     
     if ((navigator.appVersion.indexOf("X11")!=-1) || (navigator.appVersion.indexOf("Linux")!=-1) || (jQuery.browser.opera)) {
@@ -4955,7 +4981,7 @@ function FlashAudio(phono, config, callback) {
     flashembed(containerId, 
                {
                    id:containerId + "id",
-                   src:this.config.swf,
+                   src:this.config.swf + "?rnd=" + new Date().getTime(),
                    wmode:wmodeSetting
                }, 
                {
@@ -4984,7 +5010,8 @@ FlashAudio.prototype.permission = function() {
 };
 
 // Creates a new Player and will optionally begin playing
-FlashAudio.prototype.play = function(url, autoPlay) {
+FlashAudio.prototype.play = function(transport, autoPlay) {
+    url = transport.uri.replace("protocol",this.config.protocol);
     var luri = url;
     var uri = Phono.util.parseUri(url);
     var location = Phono.util.parseUri(document.location);
@@ -4992,12 +5019,17 @@ FlashAudio.prototype.play = function(url, autoPlay) {
     if (uri.protocol == "rtp") return null;
     if (url.indexOf("//") == 0) {
         luri = location.protocol+":"+url;
-    } else if (uri.protocol.length < 2){
+    } else if (uri.protocol.length < 2) {
         // We are relative, so use the document.location
         luri = location.protocol+"://"+location.authority+location.directoryPath+url;
     }
     
-    var player = this.$flash.play(luri, autoPlay);
+    var player;
+    if (this.config.direct == true && transport.peerID != undefined && this.config.cirrus != undefined) {
+        Phono.log.info("Direct media play with peer " + transport.peerID);
+        player = this.$flash.play(luri, autoPlay, transport.peerID, this.config.video);
+    }
+    else player = this.$flash.play(luri, autoPlay);
     return {
         url: function() {
             return player.getUrl();
@@ -5020,8 +5052,15 @@ FlashAudio.prototype.play = function(url, autoPlay) {
 };
 
 // Creates a new audio Share and will optionally begin playing
-FlashAudio.prototype.share = function(url, autoPlay, codec) {
-    var share = this.$flash.share(url, autoPlay, codec.id, codec.name, codec.rate);
+FlashAudio.prototype.share = function(transport, autoPlay, codec) {
+    var url = transport.uri.replace("protocol",this.config.protocol);
+    var direct = false;
+    var peerID = "";
+    if (this.config.direct == true && transport.peerID != undefined && this.config.cirrus != undefined) { 
+        peerID = transport.peerID;
+        Phono.log.info("Direct media share with peer " + transport.peerID);
+    }
+    var share = this.$flash.share(url, autoPlay, codec.id, codec.name, codec.rate, true, peerID, this.config.video);
     return {
         // Readonly
         url: function() {
@@ -5081,18 +5120,42 @@ FlashAudio.prototype.share = function(url, autoPlay, codec) {
 
 // Returns an object containg JINGLE transport information
 FlashAudio.prototype.transport = function() {
+    var $flash = this.$flash;
+    var config = this.config;
+    var cirrus = this.config.cirrus;
     return {
         name: this.$flash.getTransport(),
         description: this.$flash.getDescription(),
-        buildTransport: function(j) {
-            j.c('transport',{xmlns:this.name});
+        buildTransport: function(direction, j, callback) {
+            var nearID = "";
+            if (config.direct) {
+                nearID = $flash.nearID(cirrus);
+            }
+            if (nearID != "") {
+                j.c('transport',{xmlns:this.name, peerID:nearID});
+            } else {
+                j.c('transport',{xmlns:this.name});
+            }
+            callback();
         },
         processTransport: function(t) {
-            var fullUri;
+            var pID = t.attr('peerid');
+            var transport;
+            // If we have a Peer ID, and no other transport, fake one
+            if (pID != undefined)
+                transport = {input: {uri: "rtmfp://invalid/invalid",
+                                     peerID: pID},   
+                             output: {uri: "rtmfp://invalid/invalid",
+                                      peerID: pID}
+                            };
             t.find('candidate').each(function () {
-                fullUri = $(this).attr('rtmpUri') + "/" + $(this).attr('playName');
+                transport = { input: {uri: $(this).attr('rtmpUri') + "/" + $(this).attr('playName'),
+                                      peerID: pID},   
+                              output: {uri: $(this).attr('rtmpUri') + "/" + $(this).attr('publishName'),
+                                       peerID: pID}
+                            };
             });
-            return fullUri;
+            return transport;
         }
     }
 };
@@ -5112,7 +5175,7 @@ FlashAudio.prototype.codecs = function() {
 };
 
 // Creates a DIV to hold the Flash movie if one was not specified by the user
-FlashAudio.prototype.createContainer = function() {
+FlashAudio.prototype.createContainer = function(phono) {
     
     var flashDiv = $("<div>")
       	.attr("id","_phono-audio-flash" + (FlashAudio.count++))
@@ -5232,7 +5295,8 @@ JavaAudio.count = 0;
 // =============================================================================================
 
 // Creates a new Player and will optionally begin playing
-JavaAudio.prototype.play = function(url, autoPlay) {
+JavaAudio.prototype.play = function(transport, autoPlay) {
+    var url = transport.uri;
     var applet = this.$applet[0];
     var player;
     var luri = url;
@@ -5271,9 +5335,13 @@ JavaAudio.prototype.play = function(url, autoPlay) {
 };
 
 // Creates a new audio Share and will optionally begin playing
-JavaAudio.prototype.share = function(url, autoPlay, codec) {
+JavaAudio.prototype.share = function(transport, autoPlay, codec) {
+    var url = transport.uri;
     var applet = this.$applet[0];
-    var share = applet.share(url, codec.p, autoPlay);
+
+    Phono.log.debug("[JAVA share codec ] "+codec.p.pt +" id = "+codec.id);
+    var acodec = applet.mkCodec(codec.p, codec.id);
+    var share = applet.share(url, acodec, autoPlay);
     return {
         // Readonly
         url: function() {
@@ -5345,17 +5413,18 @@ JavaAudio.prototype.transport = function() {
     return {
         name: "urn:xmpp:jingle:transports:raw-udp:1",
         description: "urn:xmpp:jingle:apps:rtp:1",
-        buildTransport: function(j) {
+        buildTransport: function(direction, j, callback) {
             var uri = Phono.util.parseUri(endpoint);
             j.c('transport',{xmlns:"urn:xmpp:jingle:transports:raw-udp:1"})
                 .c('candidate',{ip:uri.domain, port:uri.port, generation:"1"});
+            callback();
         },
         processTransport: function(t) {
             var fullUri;
             t.find('candidate').each(function () {
                 fullUri = endpoint + ":" + $(this).attr('ip') + ":" + $(this).attr('port');
             });
-            return fullUri;
+            return {input:{uri:fullUri}, output:{uri:fullUri}};
         }
     }
 };
@@ -5526,8 +5595,8 @@ PhonegapIOSAudio.prototype.initState = function(callback, plugin) {
 // =============================================================================================
 
 // Creates a new Player and will optionally begin playing
-PhonegapIOSAudio.prototype.play = function(url, autoPlay) {
-    
+PhonegapIOSAudio.prototype.play = function(transport, autoPlay) {
+    var url = transport.uri;
     var luri = url;
     var uri = Phono.util.parseUri(url);
     var location = Phono.util.parseUri(document.location);
@@ -5587,8 +5656,9 @@ PhonegapIOSAudio.prototype.play = function(url, autoPlay) {
 };
 
 // Creates a new audio Share and will optionally begin playing
-PhonegapIOSAudio.prototype.share = function(url, autoPlay, codec) {
-
+PhonegapIOSAudio.prototype.share = function(transport, autoPlay, codec) {
+    var url = transport.uri;
+    var codecD = ""+codec.name+":"+codec.rate+":"+codec.id;
     // Get PhoneGap to create the share
     PhoneGap.exec( 
                   function(result) {console.log("share success: " + result);},
@@ -5597,7 +5667,7 @@ PhonegapIOSAudio.prototype.share = function(url, autoPlay, codec) {
                   [{
                       'uri':url,
                       'autoplay': autoPlay == true ? "YES":"NO",
-                      'codec':codec.id
+                      'codec':codecD
                   }]);
 
     var luri = Phono.util.localUri(url);
@@ -5733,18 +5803,19 @@ PhonegapIOSAudio.prototype.transport = function() {
     return {
         name: "urn:xmpp:jingle:transports:raw-udp:1",
         description: "urn:xmpp:jingle:apps:rtp:1",
-        buildTransport: function(j) {
+        buildTransport: function(direction, j, callback) {
             console.log("buildTransport: " + endpoint);
             var uri = Phono.util.parseUri(endpoint);
             j.c('transport',{xmlns:"urn:xmpp:jingle:transports:raw-udp:1"})
                 .c('candidate',{ip:uri.domain, port:uri.port, generation:"1"});
+            callback();
         },
         processTransport: function(t) {
             var fullUri;
             t.find('candidate').each(function () {
                 fullUri = endpoint + ":" + $(this).attr('ip') + ":" + $(this).attr('port');
             });
-            return fullUri;
+            return {input:{uri:fullUri}, output:{uri:fullUri}};
         }
     }
 };
@@ -5836,8 +5907,8 @@ PhonegapAndroidAudio.prototype.initState = function(callback, plugin) {
 // =============================================================================================
 
 // Creates a new Player and will optionally begin playing
-PhonegapAndroidAudio.prototype.play = function(url, autoPlay) {
-    
+PhonegapAndroidAudio.prototype.play = function(transport, autoPlay) {
+    var url = transport.uri;
     var luri = url;
     var uri = Phono.util.parseUri(url);
     var location = Phono.util.parseUri(document.location);
@@ -5845,7 +5916,7 @@ PhonegapAndroidAudio.prototype.play = function(url, autoPlay) {
     if (uri.protocol == "rtp") return null;
     if (url.indexOf("//") == 0) {
         luri = location.protocol+":"+url;
-    } else if (uri.protocol.length < 2){
+    } else if (uri.protocol.length < 2) {
         // We are relative, so use the document.location
         luri = location.protocol+"://"+location.directoryPath.substring(0,location.directoryPath.length)+url;
         luri = encodeURI(luri);
@@ -5897,7 +5968,10 @@ PhonegapAndroidAudio.prototype.play = function(url, autoPlay) {
 };
 
 // Creates a new audio Share and will optionally begin playing
-PhonegapAndroidAudio.prototype.share = function(url, autoPlay, codec) {
+PhonegapAndroidAudio.prototype.share = function(transport, autoPlay, codec) {
+    var url = transport.uri;
+    var codecD = ""+codec.name+":"+codec.rate+":"+codec.id;
+
 
     // Get PhoneGap to create the share
     PhoneGap.exec(function(result) {console.log("share: success");},
@@ -5907,12 +5981,15 @@ PhonegapAndroidAudio.prototype.share = function(url, autoPlay, codec) {
                   [{
                       'uri':url,
                       'autoplay': autoPlay == true ? "YES":"NO",
-                      'codec':codec.name
+                      'codec':codecD
                   }]);   
 
     var luri = Phono.util.localUri(url);
     var muteStatus = false;
     var gainValue = 50;
+    var micEnergy = 0.0;
+    var spkEnergy = 0.0;
+
 
     // Return a shell of an object
     return {
@@ -6002,9 +6079,22 @@ PhonegapAndroidAudio.prototype.share = function(url, autoPlay, codec) {
    	    }
         },
         energy: function(){
+            PhoneGap.exec(
+                        function(result) {
+                            console.log("energy success: " + result);
+                            var en = jQuery.parseJSON(result);
+                            if(en != null) {
+                              micEnergy = Math.floor(Math.max((Math.LOG2E * Math.log(en.mic)-4.0),0.0));
+                              spkEnergy = Math.floor(Math.max((Math.LOG2E * Math.log(en.spk)-4.0),0.0)); 
+			    }
+                          },
+                        function(result) {console.log("energy fail:" + result);},
+                        "PhonogapAudio","energy",
+                        [{'uri':luri}]
+            );
             return {
-               mic: 0.0,
-               spk: 0.0
+               mic: micEnergy,
+               spk: spkEnergy
             }
         }
     }
@@ -6025,18 +6115,19 @@ PhonegapAndroidAudio.prototype.transport = function() {
     return {
         name: "urn:xmpp:jingle:transports:raw-udp:1",
         description: "urn:xmpp:jingle:apps:rtp:1",
-        buildTransport: function(j) {
+        buildTransport: function(direction, j, callback) {
             console.log("buildTransport: " + endpoint);
             var uri = Phono.util.parseUri(endpoint);
             j.c('transport',{xmlns:"urn:xmpp:jingle:transports:raw-udp:1"})
                 .c('candidate',{ip:uri.domain, port:uri.port, generation:"1"});
+            callback();
         },
         processTransport: function(t) {
             var fullUri;
             t.find('candidate').each(function () {
                 fullUri = endpoint + ":" + $(this).attr('ip') + ":" + $(this).attr('port');
             });
-            return fullUri;
+            return {input:{uri:fullUri}, output:{uri:fullUri}};
         }
     }
 };
@@ -6050,6 +6141,358 @@ PhonegapAndroidAudio.prototype.codecs = function() {
     return PhonegapAndroidAudio.codecs;
 };
 
+
+function WebRTCAudio(phono, config, callback) {
+
+    console.log("Initialize WebRTC");
+
+    if (typeof webkitDeprecatedPeerConnection == "function") {
+        WebRTCAudio.peerConnection = webkitDeprecatedPeerConnection;
+    } else {
+        WebRTCAudio.peerConnection = webkitPeerConnection;
+    }
+
+    this.config = Phono.util.extend({
+        media: {audio:true,video:true}
+    }, config);
+    
+    var plugin = this;
+    
+    var localContainerId = this.config.localContainerId;
+    var remoteContainerId = this.config.remoteContainerId;
+
+    // Create audio continer if user did not specify one
+    if(!localContainerId) {
+	this.config.localContainerId = this.createContainer();
+    }
+    if(!remoteContainerId) {
+	this.config.remoteContainerId = this.createContainer();
+    }
+
+    WebRTCAudio.remoteVideo = document.getElementById(this.config.remoteContainerId);
+    WebRTCAudio.localVideo = document.getElementById(this.config.localContainerId);
+
+    try { 
+        console.log("Request access to local media, use new syntax");
+        navigator.webkitGetUserMedia(this.config.media, 
+                                     function(stream) {
+                                         WebRTCAudio.localStream = stream;
+                                         console.log("We have a stream");
+                                         var url = webkitURL.createObjectURL(stream);
+                                         WebRTCAudio.localVideo.style.opacity = 1;
+                                         WebRTCAudio.localVideo.src = url;
+                                         callback(plugin);
+                                     },
+                                     function(error) {
+                                         console.log("Failed to get access to local media. Error code was " + error.code);
+                                         alert("Failed to get access to local media. Error code was " + error.code + ".");   
+                                     });
+    } catch (e) {
+        console.log("getUserMedia error, try old syntax");
+        navigator.webkitGetUserMedia("video,audio", 
+                                     function(stream) {
+                                         WebRTCAudio.localStream = stream;
+                                         console.log("We have a stream");
+                                         var url = webkitURL.createObjectURL(stream);
+                                         WebRTCAudio.localVideo.style.opacity = 1;
+                                         WebRTCAudio.localVideo.src = url;
+                                         callback(plugin);
+                                     },
+                                     function(error) {
+                                         console.log("Failed to get access to local media. Error code was " + error.code);
+                                         alert("Failed to get access to local media. Error code was " + error.code + ".");   
+                                     });    
+    }
+}
+
+WebRTCAudio.exists = function() {
+    return (typeof webkitDeprecatedPeerConnection == "function")|| (typeof webkitPeerConnection == "function");
+}
+
+//WebRTCAudio.localStream = null;
+WebRTCAudio.offer = null;
+WebRTCAudio.answer = null;
+WebRTCAudio.pc = null
+WebRTCAudio.stun = "STUN stun.l.google.com:19302";
+WebRTCAudio.count = 0;
+
+// WebRTCAudio Functions
+//
+// =============================================================================================
+
+// Creates a new Player and will optionally begin playing
+WebRTCAudio.prototype.play = function(transport, autoPlay) {
+    var url = transport.uri;
+    var luri = url;
+    var audioPlayer = null;
+    
+    return {
+        url: function() {
+            return luri;
+        },
+        start: function() {
+            if (audioPlayer != null) {
+                $(audioPlayer).remove();
+            }
+            audioPlayer = $("<audio>")
+      	        .attr("id","_phono-audioplayer-webrtc" + (WebRTCAudio.count++))
+                .attr("autoplay","autoplay")
+                .attr("src",url)
+                .attr("loop","loop")
+      	        .appendTo("body");
+        },
+        stop: function() {
+            $(audioPlayer).remove();
+            audioPlayer = null;
+        },
+        volume: function() { 
+        }
+    }
+};
+
+// Creates a new audio Share and will optionally begin playing
+WebRTCAudio.prototype.share = function(transport, autoPlay, codec) {
+    var url = transport.uri;
+    var share;
+    var localStream;  
+
+    return {
+        // Readonly
+        url: function() {
+            return null;
+        },
+        codec: function() {
+            return null;
+        },
+        // Control
+        start: function() {
+            // Start - we already have done...
+        },
+        stop: function() {
+            // Stop
+            console.log("Closing PeerConnection");
+            if (WebRTCAudio.pc != null) {
+                WebRTCAudio.pc.close();
+                WebRTCAudio.pc = null;
+                WebRTCAudio.offer = null;
+                WebRTCAudio.answer = null;
+            } 
+            WebRTCAudio.remoteVideo.style.opacity = 0;
+        },
+        digit: function(value, duration, audible) {
+            // No idea how to do this yet
+        },
+        // Properties
+        gain: function(value) {
+            return null;
+        },
+        mute: function(value) {
+//            if(arguments.length === 0) {
+ //               return WebRTCAudio.localStream.audioTracks.item(1).enabled;
+//   	    }
+//            if (value == true) {
+//                WebRTCAudio.localStream.audioTracks.item(1).enabled = false;
+//            } else {
+//                WebRTCAudio.localStream.audioTracks.item(1).enabled = true;
+//            }
+            return null;
+        },
+        suppress: function(value) {
+            return null;
+        },
+        energy: function(){        
+            return {
+               mic: 0.0,
+               spk: 0.0
+            }
+        }
+    }
+};   
+
+// Do we have WebRTC permission? 
+WebRTCAudio.prototype.permission = function() {
+    return true;
+};
+
+// Returns an object containg JINGLE transport information
+WebRTCAudio.prototype.transport = function() {
+    
+    return {
+        name: "http://phono.com/webrtc/transport",
+        description: "http://phono.com/webrtc/description",
+        buildTransport: function(direction, j, callback, u, updateCallback) {
+            if (direction == "answer") {
+                // We are the result of an inbound call, so provide answer
+                if (WebRTCAudio.pc != null) {
+                    WebRTCAudio.pc.close();
+                    WebRTCAudio.pc = null;
+                }
+                WebRTCAudio.pc = new WebRTCAudio.peerConnection(WebRTCAudio.stun,
+                                                          function(message) {
+                                                              console.log("C->S SDP: " + message);
+                                                              var roap = jQuery.parseJSON(message.substring(4,message.length));
+                                                              if (roap['messageType'] == "ANSWER") {
+                                                                  console.log("Received ANSWER from PeerConnection: " + message);
+                                                                  // Canary is giving a null s= line, so 
+                                                                  // we replace it with something useful
+                                                                  message = message.replace("s=", "s=Canary");
+                                                                  WebRTCAudio.answer = message;
+                                                                  j.c('transport',{xmlns:"http://phono.com/webrtc/transport"})
+                                                                      .c('roap',Base64.encode(WebRTCAudio.answer));
+                                                                  WebRTCAudio.ok = "SDP\n{\n\"answererSessionId\":\"" +
+                                                                      roap['offererSessionId'] + "\",\n" +
+                                                                      "\"messageType\":\"OK\",\n" +
+                                                                      "\"offererSessionId\":\"" +
+                                                                      roap['answererSessionId'] + "\",\n" +
+                                                                      "\"seq\":1\n}"
+                                                                  
+                                                                  setTimeout(function() {
+                                                                      // Auto OK it
+                                                                      console.log("H->C SDP: " + WebRTCAudio.ok);
+                                                                      WebRTCAudio.pc.processSignalingMessage(WebRTCAudio.ok);
+                                                                  }, 1);
+                                                                  // Invoke the callback to finish 
+                                                                  callback();
+                                                              } else if (roap['messageType'] == "OFFER") {
+                                                                  // Oh no, here we go
+                                                                  if (WebRTCAudio.offer.indexOf("video") != -1) {
+                                                                      WebRTCAudio.offer = message;
+                                                                      u.c('transport',{xmlns:"http://phono.com/webrtc/transport"})
+                                                                          .c('roap',Base64.encode(WebRTCAudio.offer));
+                                                                      updateCallback();
+                                                                  } else {
+                                                                      // This is an audio only call, lets lie
+                                                                      roapAnswer = jQuery.parseJSON(WebRTCAudio.offer.substring(4,message.length));
+                                                                      fakeAnswer = "SDP\n{\n\"answererSessionId\":\"" +
+                                                                      roap['answererSessionId'] + "\",\n" +
+                                                                      "\"messageType\":\"ANSWER\",\n" +
+                                                                      "\"offererSessionId\":\"" +
+                                                                      roap['offererSessionId'] + "\",\n" +
+                                                                          "\"seq\":2,\n" +
+                                                                          "\"sdp\":\"" + roapAnswer['sdp']
+                                                                          + "\"}";
+                                                                      console.log("H->C SDP: " + fakeAnswer);
+                                                                      WebRTCAudio.pc.processSignalingMessage(fakeAnswer);
+                                                                  }
+                                                              } else {
+                                                                  console.log("Recieved unexpected ROAP: " + message);
+                                                              }
+                                                          }
+                                                         );
+                
+                WebRTCAudio.pc.onaddstream = function(event) {
+                    console.log("Remote stream added.");
+                    console.log("Local stream is: " + WebRTCAudio.localStream);
+                    var url = webkitURL.createObjectURL(event.stream);
+                    WebRTCAudio.remoteVideo.style.opacity = 1;
+                    WebRTCAudio.remoteVideo.src = url;
+                };
+                WebRTCAudio.pc.onremovestream = function(event) {
+                    conole.log("Remote stream removed.");
+                };
+                console.log("Created new PeerConnection, passing it :" + WebRTCAudio.offer);
+                WebRTCAudio.pc.addStream(WebRTCAudio.localStream); 
+                WebRTCAudio.pc.processSignalingMessage(WebRTCAudio.offer);
+            } else {
+                // We are creating an outbound call
+                if (WebRTCAudio.pc != null) {
+                    WebRTCAudio.pc.close();
+                    WebRTCAudio.pc = null;
+                }
+                WebRTCAudio.pc = new WebRTCAudio.peerConnection(WebRTCAudio.stun,
+                                                          function(message) {
+                                                              console.log("C->S SDP: " + message);
+                                                              // Canary is giving a null s= line, so 
+                                                              // we replace it with something useful
+                                                              message = message.replace("s=", "s=Canary");
+                                                              //message = message.replace("a=group:BUNDLE audio video", "a=group:BUNDLE 2 1");
+                                                              //message = message.replace("a=mid:audio", "a=mid:2");
+                                                              //message = message.replace("a=mid:video", "a=mid:1");
+                                                              var roap = jQuery.parseJSON(message.substring(4,message.length));
+                                                              if (roap['messageType'] == "OFFER") {
+                                                                  j.c('transport',{xmlns:"http://phono.com/webrtc/transport"})
+                                                                      .c('roap',Base64.encode(message));  
+                                                                  WebRTCAudio.offer = message;
+                                                                  callback();
+                                                              } else if (roap['messageType'] == "OK") {
+                                                                  // Ignore, we autogenerate on remote side
+                                                              }
+                                                              else if (roap['messageType'] == "ANSWER") {
+                                                                  // Oh no, here we go
+                                                                  WebRTCAudio.answer = message;
+                                                                  u.c('transport',{xmlns:"http://phono.com/webrtc/transport"})
+                                                                      .c('roap',Base64.encode(WebRTCAudio.answer));
+                                                                  updateCallback();
+                                                              } else {
+                                                                  console.log("Recieved unexpected ROAP: " + message);
+                                                              }
+                                                          }
+                                                         );
+                WebRTCAudio.pc.onaddstream = function(event) {
+                    console.log("Remote stream added.");
+                    console.log("Local stream is: " + WebRTCAudio.localStream);
+                    var url = webkitURL.createObjectURL(event.stream);
+                    WebRTCAudio.remoteVideo.style.opacity = 1;
+                    WebRTCAudio.remoteVideo.src = url;
+                };
+                WebRTCAudio.pc.addStream(WebRTCAudio.localStream);
+                console.log("Created PeerConnection for new OUTBOUND CALL");
+            }
+        },
+        processTransport: function(t) {
+            var roap;
+            var message;
+            t.find('roap').each(function () {
+                var encoded = this.textContent;
+                message = Base64.decode(encoded);
+                console.log("S->C SDP: " + message);
+                roap = jQuery.parseJSON(message.substring(4,message.length));
+            });
+            if (roap['messageType'] == "OFFER") {
+                // We are receiving an inbound call
+                // Store the offer so we can use it to create an answer
+                //  when the user decides to do so
+                WebRTCAudio.offer = message;
+                // Or we are getting an update...
+                if (WebRTCAudio.pc != null) WebRTCAudio.pc.processSignalingMessage(message);
+            } else if (roap['messageType'] == "ANSWER") {
+
+                // We are having an outbound call answered (must already have a PeerConnection)
+                WebRTCAudio.pc.processSignalingMessage(message);
+            }
+            return {input:{uri:"webrtc"}, output:{uri:"webrtc"}};
+        }
+    }
+};
+
+// Returns an array of codecs supported by this plugin
+// Hack until we get capabilities support
+WebRTCAudio.prototype.codecs = function() {
+    var result = new Array();
+    result.push({
+        id: 1,
+        name: "webrtc",
+        rate: 16000,
+        p: 20
+    });
+    return result;
+};
+
+WebRTCAudio.prototype.audioInDevices = function(){
+    var result = new Array();
+    return result;
+}
+
+// Creates a DIV to hold the video element if not specified by the user
+WebRTCAudio.prototype.createContainer = function() {
+    var webRTC = $("<video>")
+      	.attr("id","_phono-audio-webrtc" + (WebRTCAudio.count++))
+        .attr("autoplay","autoplay")
+      	.appendTo("body");
+
+    var containerId = $(webRTC).attr("id");       
+    return containerId;
+};      
 
 
     Phono.registerPlugin("audio", {
@@ -6071,6 +6514,9 @@ PhonegapAndroidAudio.prototype.codecs = function() {
                 
             } else if (config.type === "flash") {
                 return Phono.util.loggify("FlashAudio", new FlashAudio(phono, config, callback));
+
+            } else if (config.type === "webrtc") {
+                return Phono.util.loggify("WebRTCAudio", new WebRTCAudio(phono, config, callback));
                 
             } else if (config.type === "none") {
                 window.setTimeout(callback,10);
@@ -6087,7 +6533,6 @@ PhonegapAndroidAudio.prototype.codecs = function() {
                 } else if (PhonegapAndroidAudio.exists()) { 
                     console.log("Detected Android"); 
                     return Phono.util.loggify("PhonegapAndroidAudio", new PhonegapAndroidAudio(phono, config, callback));
-                    
                 } else { 
                     console.log("Detected Flash"); 
                     return Phono.util.loggify("FlashAudio", new FlashAudio(phono, config, callback));
@@ -6215,8 +6660,8 @@ PhonegapAndroidAudio.prototype.codecs = function() {
       // Bind Event Listeners
       Phono.events.bind(this, config);
       
-      this.ringer = this.audioLayer.play(phone.ringTone()); 
-      this.ringback = this.audioLayer.play(phone.ringbackTone());
+       this.ringer = this.audioLayer.play({uri:phone.ringTone()}); 
+       this.ringback = this.audioLayer.play({uri:phone.ringbackTone()});
       if (this.audioLayer.audioIn){
          this.audioLayer.audioIn(phone.audioInput());
       }
@@ -6247,9 +6692,9 @@ PhonegapAndroidAudio.prototype.codecs = function() {
       
       if (call.state != CallState.INITIAL) return;
        
-      var jingleIq = $iq({type:"set", to:call.remoteJid});
+      var initiateIq = $iq({type:"set", to:call.remoteJid});
       
-      var jingle = jingleIq.c('jingle', {
+      var initiate = initiateIq.c('jingle', {
          xmlns: Strophe.NS.JINGLE,
          action: "session-initiate",
          initiator: call.initiator,
@@ -6257,26 +6702,47 @@ PhonegapAndroidAudio.prototype.codecs = function() {
       });
                      
       $(call.headers).each(function() {
-         jingle.c("custom-header", {name:this.name, data:this.value}).up();
+         initiate.c("custom-header", {name:this.name, data:this.value}).up();
       });
              
-       var partial = jingle
+       var partialInitiate = initiate
            .c('content', {creator:"initiator"})
            .c('description', {xmlns:this.transport.description})
        
        Phono.util.each(this.config.codecs(Phono.util.filterWideband(this.audioLayer.codecs(),this.phone.wideband())), function() {
-           partial = partial.c('payload-type', {
+           partialInitiate = partialInitiate.c('payload-type', {
                id: this.id,
                name: this.name,
                clockrate: this.rate
            }).up();           
        });
 
-       this.transport.buildTransport(partial.up());
+       var updateIq = $iq({type:"set", to:call.remoteJid});
        
-      this.connection.sendIQ(jingleIq, function (iq) {
-         call.state = CallState.PROGRESS;
-      });
+       var update = updateIq.c('jingle', {
+           xmlns: Strophe.NS.JINGLE,
+           action: "transport-accept",
+           initiator: call.initiator,
+           sid: call.id
+       });
+       
+       var partialUpdate = update
+           .c('content', {creator:"initiator"})
+           .c('description', {xmlns:this.transport.description})
+       
+       this.transport.buildTransport("offer", partialInitiate.up(), 
+                                     function() {
+                                         call.connection.sendIQ(initiateIq, function (iq) {
+                                             call.state = CallState.PROGRESS;
+                                         });
+                                     },
+                                     partialUpdate.up(),
+                                     function() {
+                                         call.connection.sendIQ(updateIq, function (iq) {
+                                         });   
+                                     }
+                                    );
+
    };
    
    Call.prototype.accept = function() {
@@ -6301,7 +6767,7 @@ PhonegapAndroidAudio.prototype.codecs = function() {
           call.state = CallState.RINGING;
           Phono.events.trigger(call, "ring");
       });
-      
+
    };
    
    Call.prototype.answer = function() {
@@ -6311,38 +6777,62 @@ PhonegapAndroidAudio.prototype.codecs = function() {
       if (call.state != CallState.RINGING 
       && call.state != CallState.PROGRESS) return;
 
-       var jingleIq = $iq({type:"set", to:call.remoteJid});
+       var acceptIq = $iq({type:"set", to:call.remoteJid});
       
-       var jingle = jingleIq.c('jingle', {
+       var accept = acceptIq.c('jingle', {
            xmlns: Strophe.NS.JINGLE,
            action: "session-accept",
            initiator: call.initiator,
            sid: call.id
        });
        
-       var partial = jingle
+       var partialAccept = accept
            .c('content', {creator:"initiator"})
-           .c('description', {xmlns:this.transport.description})
+           .c('description', {xmlns:this.transport.description});
        
-       Phono.util.each(this.config.codecs(Phono.util.filterWideband(this.audioLayer.codecs(),this.phone.wideband())), function() {
-           if ((this.id == call.codec.id && this.rate == call.codec.rate) || this.name == "telephone-event") {
-               partial = partial.c('payload-type', {
+       partialAccept = partialAccept.c('payload-type', {
+           id: call.codec.id,
+           name: call.codec.name,
+           clockrate: call.codec.rate
+       }).up();           
+
+       $.each((call.audioLayer.codecs()), function() {
+           if (this.name == "telephone-event") {
+               partialAccept = partialAccept.c('payload-type', {
                    id: this.id,
                    name: this.name,
                    clockrate: this.rate
-               }).up();           
-           }
+               }).up();     
+           } 
        });
        
-       this.transport.buildTransport(partial.up());
-       
-       this.connection.sendIQ(jingleIq, function (iq) {
-           call.state = CallState.CONNECTED;
-           Phono.events.trigger(call, "answer");
-           if (call.ringer != null) call.ringer.stop();
-           call.startAudio();
+       var updateIq = $iq({type:"set", to:call.remoteJid});
+      
+       var update = updateIq.c('jingle', {
+           xmlns: Strophe.NS.JINGLE,
+           action: "transport-replace",
+           initiator: call.initiator,
+           sid: call.id
        });
        
+       var partialUpdate = update
+           .c('content', {creator:"initiator"})
+           .c('description', {xmlns:this.transport.description})
+
+       this.transport.buildTransport("answer", partialAccept.up(), 
+                                     function(){
+                                         call.connection.sendIQ(acceptIq, function (iq) {
+                                             call.state = CallState.CONNECTED;
+                                             Phono.events.trigger(call, "answer");
+                                             if (call.ringer != null) call.ringer.stop();
+                                             call.startAudio();
+                                         });
+                                     },
+                                     partialUpdate.up(),
+                                     function() {
+                                         call.connection.sendIQ(updateIq, function (iq) {
+                                         });   
+                                     });
    };
 
    Call.prototype.bindAudio = function(binding) {
@@ -6496,7 +6986,7 @@ PhonegapAndroidAudio.prototype.codecs = function() {
           var codecId = $(this).attr('id');
           $.each(call.config.codecs(Phono.util.filterWideband(call.audioLayer.codecs(),call.phone.wideband())), function() {
              if ((this.name == codecName && this.rate == codecRate && this.name != "telephone-event") || (parseInt(this.id) < 90 && this.id == codecId)) {
-                 if (codec == null) codec = this;
+                 if (codec == null) codec = {id: codecId , name:this.name,  rate: this.rate, p: this.p};
                  return false;
             } 
          });
@@ -6504,19 +6994,25 @@ PhonegapAndroidAudio.prototype.codecs = function() {
       
       // No matching codec
       if (!codec) {
-          Phono.log.error("No matching codec");
-          return null;
+          Phono.log.error("No matching jingle codec (not a problem if using WebRTC)");
+          // Voodoo up a temporary codec as a placeholder
+          codec = {
+              id: 1,
+              name: "webrtc-ulaw",
+              rate: 8000,
+              p: 20
+          };
       }
        
       // Find a matching media transport
       var foundTransport = false;
       $(iq).find('transport').each(function () {
           if (call.transport.name == $(this).attr('xmlns') && foundTransport == false) {
-              var uri = call.transport.processTransport($(this));      
-              if (uri != undefined) {
+              var transport = call.transport.processTransport($(this));      
+              if (transport != undefined) {
                   call.bindAudio({
-                      input: call.audioLayer.play(uri, false),
-                      output: call.audioLayer.share(uri, false, codec)
+                      input: call.audioLayer.play(transport.input, false),
+                      output: call.audioLayer.share(transport.output, false, codec)
                   });
                   foundTransport = true;
               } else {
@@ -6608,7 +7104,6 @@ PhonegapAndroidAudio.prototype.codecs = function() {
             call.codec = call.negotiate(iq);
             if(call.codec == null) {
                Phono.log.warn("Failed to negotiate incoming call", iq);
-               return true;
             }
             
             // Get incoming headers
@@ -6631,7 +7126,7 @@ PhonegapAndroidAudio.prototype.codecs = function() {
             Phono.events.trigger(this, "incomingCall", {
                call: call
             });
-
+          
             // Get microphone permission if we are going to need it
             if(!audioLayer.permission()) {
                 Phono.events.trigger(audioLayer, "permissionBoxShow");
@@ -6645,8 +7140,7 @@ PhonegapAndroidAudio.prototype.codecs = function() {
             // Negotiate SDP
             call.codec = call.negotiate(iq);
             if(call.codec == null) {
-               Phono.log.warn("Failed to negotiate outbound call", iq);
-               return true;
+                Phono.log.warn("Failed to negotiate outbound call", iq);
             }
 
             call.state = CallState.CONNECTED;
@@ -6660,6 +7154,12 @@ PhonegapAndroidAudio.prototype.codecs = function() {
             // Fire answer event
             Phono.events.trigger(call, "answer")
             
+            break;
+
+         // Transport information update
+         case "transport-replace":
+         case "transport-accept":
+            call.transport.processTransport($(iq));
             break;
 
          // Hangup
@@ -6692,7 +7192,8 @@ PhonegapAndroidAudio.prototype.codecs = function() {
       this.connection.send(
          $iq({
             type: "result", 
-            id: $(iq).attr('id')
+             id: $(iq).attr('id'),
+             to:call.remoteJid
          })
       );
       
@@ -6733,11 +7234,14 @@ PhonegapAndroidAudio.prototype.codecs = function() {
       if(to.match("^sip:") || to.match("^sips:")) {
          call.remoteJid = Phono.util.escapeXmppNode(to.substr(4)) + "@sip";
       }
+      else if(to.match("^xmpp:")) {
+         call.remoteJid = to.substr(5); 
+      }
       else if(to.match("^app:")) {
          call.remoteJid = Phono.util.escapeXmppNode(to.substr(4)) + "@app";
       }
       else if(to.match("^tel:")) {
-         call.remoteJid = "9991475834@app";
+         call.remoteJid = "9996182316@app";
          call.headers.push({
             name: "x-numbertodial",
             value: to.substr(4)
@@ -6746,14 +7250,14 @@ PhonegapAndroidAudio.prototype.codecs = function() {
       else {
          var number = to.replace(/[\(\)\-\.\ ]/g, '');
          if(number.match(/^\+?\d+$/)) {
-            call.remoteJid = "9991475834@app";
+            call.remoteJid = "9996182316@app";
             call.headers.push({
                name: "x-numbertodial",
                value: number
             });
          }
          else if(to.indexOf("@") > 0) {
-            call.remoteJid = Phono.util.escapeXmppNode(to) + "@sip";
+             call.remoteJid = Phono.util.escapeXmppNode(to) + "@sip";
          }
       }
    };

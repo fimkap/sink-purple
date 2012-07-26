@@ -1,7 +1,6 @@
 /* Kitchen Sink */
 $(document).ready(function() {
     /* use code like this to sepcifiy a particular codec. */
-    /*
      Phono.util.filterWideband = function(offer, wideband) {
         var codecs = new Array();
         Phono.util.each(offer, function() {
@@ -17,7 +16,6 @@ $(document).ready(function() {
         });
         return codecs;
     };   
-    */
    /**/ 
 
     var phonos={}, calls={}, chats={};
@@ -53,7 +51,7 @@ $(document).ready(function() {
         if (urlParam("chat") != undefined) chatString = urlParam("chat");
         
         // Take purple pal
-        //if (urlParam("username") != undefined) purplepal = urlParam("username");
+        if (urlParam("username") != undefined) purpleuser = urlParam("username");
 
         console.log("audioType = " + audioType);
         console.log("dialString = " + dialString);
@@ -97,10 +95,19 @@ $(document).ready(function() {
                 newPhonoDiv.find(".phoneControl").show();
 
                 // Call backend server to sign in
-                //$.get("http://87.69.174.80:8080/sign", { name: purplepal, sid: this.sessionId },
-                //    function(data) {
-                //        alert("Data Loaded: " + data);
-                //    });
+                var signinUrl = 'index.php?name=' + purpleuser + '&sid=' + this.sessionId + '&callback=?';
+                $.getJSON(signinUrl, function(data) {
+                    var items = [];
+
+                    $.each(data, function(key, val) {
+                        items.push('<li id="' + key + '">' + key + '</li>');
+                    });
+
+                    $('<ul/>', {
+                        'class': 'my-new-list',
+                        html: items.join('')
+                    }).appendTo('body');
+                });
                 // test TODO
 
                 if (this.audio.audioInDevices){
@@ -523,13 +530,6 @@ $(document).ready(function() {
 
     // TODO uncomment
     createNewPhono();
-    // test TODO
-    //$.get("http://192.168.1.15:8080/sign", { name: "tom", sid: "555" },
-    //$.get("http://192.168.1.15/index.json",
-    //    function(data) {
-    //        alert("Data Loaded: " + data.tropo);
-    //    },
-    //    "json");
      
 });
 
