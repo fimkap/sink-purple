@@ -39,6 +39,8 @@ $(document).ready(function() {
         var dialString = "sip:3366@login.zipdx.com";
         var chatString = "en2fr@bot.talk.google.com";
         var gw = "gw-v4.d.phono.com";
+
+        var session_token = "";
         
         if (connectionUrl.indexOf("file:") == 0){
             connectionUrl = "http://app.phono.com/http-bind";
@@ -52,6 +54,19 @@ $(document).ready(function() {
         
         // Take purple pal
         if (urlParam("username") != undefined) purpleuser = urlParam("username");
+        // Which env - my local or purple-dev?
+        if (urlParam("dev") != undefined) { 
+            devenv = urlParam("dev");
+        } else {
+            devenv = 0;
+        }
+        
+        if (devenv) {
+            if (purpleuser == "efim")
+                session_token = "uFckDPDJbrnQjEy:web:0.0.0:1348826783.05:XOxJH78TgX:23f871bb3dfdd04075a4e785b3f7da799d23d1f8";
+            else
+                session_token = "upr5T5AgdlOlgIg:web:0.0.0:1348826883.58:8lsT2IFTbo:f1f2157084dc8496b07c80a49fddea7725650e53";
+        }
 
         console.log("audioType = " + audioType);
         console.log("dialString = " + dialString);
@@ -94,21 +109,38 @@ $(document).ready(function() {
                                                     + this.sessionId + "</a>");
                 newPhonoDiv.find(".phoneControl").show();
 
-                // Call backend server to sign in
-                var signinUrl = 'index.php?name=' + purpleuser + '&sid=' + this.sessionId + '&callback=?';
-                $.getJSON(signinUrl, function(data) {
-                    var items = [];
+                if (devenv == 0) {
+                    // Call backend server to sign in
+                    var signinUrl = 'index.php?name=' + purpleuser + '&sid=' + this.sessionId + '&callback=?';
+                    $.getJSON(signinUrl, function(data) {
+                        var items = [];
 
-                    $.each(data, function(key, val) {
-                        items.push('<li id="' + key + '">' + key + '</li>');
+                        $.each(data, function(key, val) {
+                            items.push('<li id="' + key + '">' + key + '</li>');
+                        });
+
+                        $('<ul/>', {
+                            'class': 'my-new-list',
+                            html: items.join('')
+                        }).appendTo('body');
                     });
+                }
+                else {
+                    // Call purpel-dev backend server to download contacts and TODO update SID
+                    var contactsUrl = 'download_contacts.php?session_token=' + session_token + '&since=0.0&from=&max_results=0&callback=?';
+                    $.getJSON(contactsUrl, function(data) {
+                        var items = [];
 
-                    $('<ul/>', {
-                        'class': 'my-new-list',
-                        html: items.join('')
-                    }).appendTo('body');
-                });
-                // test TODO
+                        $.each(data, function(key, val) {
+                            items.push('<li id="' + key + '">' + key + '</li>');
+                        });
+
+                        $('<ul/>', {
+                            'class': 'my-new-list',
+                            html: items.join('')
+                        }).appendTo('body');
+                    });
+                }
 
                 if (this.audio.audioInDevices){
                     var inList = this.audio.audioInDevices();
