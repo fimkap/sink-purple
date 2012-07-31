@@ -131,14 +131,29 @@ $(document).ready(function() {
                     $.getJSON(contactsUrl, function(data) {
                         var items = [];
 
-                        $.each(data, function(key, val) {
-                            items.push('<li id="' + key + '">' + key + '</li>');
+                        $.each(data.contacts, function(key, val) {
+                            $.each(data.contacts[key].handles, function(key2) {
+                                var chandle = data.contacts[key].handles[key2];
+                                if (chandle.indexOf("pp:") == 0) {
+                                    items.push('<option value="' + chandle + '">' + data.contacts[key].name + " " + chandle + '</option>');
+                                }
+                            });
                         });
 
-                        $('<ul/>', {
+                        // Create selectable list and add button to initiate a new call to purple pal
+
+                        $('<select/>', {
                             'class': 'my-new-list',
                             html: items.join('')
                         }).appendTo('body');
+
+                        $('<input/>').attr("type", "button").attr("value", "Call").click(function() {
+                            var ppid = $('.my-new-list').val();
+                            //alert("ppid " + ppid);
+                            var thisPhono = $(this).closest(".phono").attr("id");
+                            createNewCall(thisPhono, appdialstring, ppid);
+                        }).appendTo("body");
+
                     });
                 }
 
