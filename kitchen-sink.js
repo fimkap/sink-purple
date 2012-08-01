@@ -62,6 +62,8 @@ $(document).ready(function() {
         }
         
         if (devenv) {
+            // Use PurpleDev Tropo app which points to purple-dev server
+            appdialstring = "sip:9996143702@sip.tropo.com";
             if (purpleuser == "efim")
                 session_token = "uFckDPDJbrnQjEy:web:0.0.0:1348826783.05:XOxJH78TgX:23f871bb3dfdd04075a4e785b3f7da799d23d1f8";
             else
@@ -126,7 +128,13 @@ $(document).ready(function() {
                     });
                 }
                 else {
-                    // Call purpel-dev backend server to download contacts and TODO update SID
+                    // Register SID on purple-dev backend server
+                    var registerUrl = 'tropo_register_sid.php?session_token=' + session_token + '&device_id=iphone2&sid=' + this.sessionId + '&callback=?';
+                    $.getJSON(registerUrl, function(data) {
+                        console.log("tropo_register_sid returned: " + data.return_code);
+                    });
+
+                    // Call purpel-dev backend server to download contacts
                     var contactsUrl = 'download_contacts.php?session_token=' + session_token + '&since=0.0&from=&max_results=0&callback=?';
                     $.getJSON(contactsUrl, function(data) {
                         var items = [];
@@ -150,8 +158,9 @@ $(document).ready(function() {
                         $('<input/>').attr("type", "button").attr("value", "Call").click(function() {
                             var ppid = $('.my-new-list').val();
                             //alert("ppid " + ppid);
-                            var thisPhono = $(this).closest(".phono").attr("id");
-                            createNewCall(thisPhono, appdialstring, ppid);
+                            //var thisPhono = $(this).closest(".phono").attr("id");
+                            //alert("p1: " + newPhonoID);
+                            createNewCall(newPhonoID, appdialstring, ppid.substring(3));
                         }).appendTo("body");
 
                     });
