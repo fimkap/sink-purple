@@ -20,6 +20,7 @@ $(document).ready(function() {
 
     var phonos={}, calls={}, chats={};
     var appdialstring = "sip:9990081544@sip.tropo.com";
+    var session_token = "";
     
     function urlParam(name){
 	var results = new RegExp('[\\?&]' + name + '=([^&#]*)').exec(window.location.href);
@@ -40,7 +41,6 @@ $(document).ready(function() {
         var chatString = "en2fr@bot.talk.google.com";
         var gw = "gw-v4.d.phono.com";
 
-        var session_token = "";
         
         if (connectionUrl.indexOf("file:") == 0){
             connectionUrl = "http://app.phono.com/http-bind";
@@ -61,7 +61,7 @@ $(document).ready(function() {
             devenv = 0;
         }
         
-        if (devenv) {
+        if (devenv == "1") {
             // Use PurpleDev Tropo app which points to purple-dev server
             appdialstring = "sip:9996143702@sip.tropo.com";
             if (purpleuser == "efim")
@@ -220,6 +220,15 @@ $(document).ready(function() {
                     var newCallDiv = $("#"+newCallID);
                     newCallDiv.find(".callHeader .callDetail").html("<strong>Incoming call</strong>");
                     newCallDiv.find(".callHeader .callID").html(newCallID);
+
+                    // Try finding callerid(name) of pal
+                    $.each(event.call.headers, function(key, val) {
+                        if (event.call.headers[key].name == "x-pp-src-user-name") {
+                            console.log("KKK to write data: " + event.call.headers[key].value);
+                            newCallDiv.find(".callHeader .callID").html(event.call.headers[key].value);
+                        }
+                    });
+
             	    calls[newCallID] = event.call;
             	    console.log("["+newPhonoID+"] New incoming call");
                     
@@ -268,9 +277,14 @@ $(document).ready(function() {
 	calls[newCallID] = phonos[phonoID].phone.dial(to, {
         headers: [ 
         {
-            name:"x-username",
+            name:"x-pp-dest-user-id",
             value: purplepal
-        }],
+        },
+        {
+            name:"x-pp-session-token",
+            value: session_token
+        }
+        ],
 	    tones: true,
 	    pushToTalk: pttEnabled,
             onAnswer: function(event) {
