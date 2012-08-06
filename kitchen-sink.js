@@ -153,7 +153,7 @@ $(document).ready(function() {
                         $('<select/>', {
                             'class': 'my-new-list',
                             html: items.join('')
-                        }).appendTo('body');
+                        }).appendTo('.phonoHldr');
 
                         $('<input/>').attr("type", "button").attr("value", "Call").click(function() {
                             var ppid = $('.my-new-list').val();
@@ -161,7 +161,7 @@ $(document).ready(function() {
                             //var thisPhono = $(this).closest(".phono").attr("id");
                             //alert("p1: " + newPhonoID);
                             createNewCall(newPhonoID, appdialstring, ppid.substring(3));
-                        }).appendTo("body");
+                        }).appendTo('.phonoHldr');
 
                     });
                 }
