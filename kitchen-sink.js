@@ -29,11 +29,11 @@ $(document).ready(function() {
     }
 
     function createNewPhono(){
-	//Clone a phono div
-	var phonoCtr = ($(".phono").size() + 1) - 1;
-	var newPhonoID = "Phono" + phonoCtr;
-	var firstPhono = $('.phono').first()
-	var newPhonoDiv = firstPhono.clone()
+        //Clone a phono div
+        var phonoCtr = ($(".phono").size() + 1) - 1;
+        var newPhonoID = "Phono" + phonoCtr;
+        var firstPhono = $('.phono').first()
+            var newPhonoDiv = firstPhono.clone()
         var audioType = $('.audio-plugin').val();
         var directP2P = false;
         var connectionUrl = window.location.protocol+"//app.phono.com/http-bind";
@@ -598,8 +598,77 @@ $(document).ready(function() {
 	    .prependTo("body");
     }
 
+
+    // FB login and Zulot list
+
+    // Load the SDK Asynchronously
+    (function(d){
+        var js, id = 'facebook-jssdk', ref = d.getElementsByTagName('script')[0];
+        if (d.getElementById(id)) {return;}
+        js = d.createElement('script'); js.id = id; js.async = true;
+        js.src = "//connect.facebook.net/en_US/all.js";
+        ref.parentNode.insertBefore(js, ref);
+    }(document));
+
+    // Init the SDK upon load
+    window.fbAsyncInit = function() {
+        FB.init({
+            appId      : '185191214947115', // App ID
+            channelUrl : '//'+window.location.hostname+'/channel', // Path to your Channel File
+            status     : true, // check login status
+            cookie     : true, // enable cookies to allow the server to access the session
+            xfbml      : true  // parse XFBML
+        });
+
+        // listen for and handle auth.statusChange events
+        FB.Event.subscribe('auth.statusChange', function(response) {
+            if (response.authResponse) {
+                // user has auth'd your app and is logged into Facebook
+                FB.api('/me', function(me){
+                    if (me.name) {
+                        var starturl = 'start_session.php?user={"facebook_id":"' + me.id + '","facebook_token":"' + response.authResponse.accessToken + '"}&client={"version":"0.1.0","platform":"iOS"}&callback=?';
+                        $.getJSON(starturl, function(data) {
+                            document.getElementById('auth-displayname').innerHTML = me.name;
+                            session_token = data.session_token;
+
+                            var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
+                            $.getJSON(groupSearchUrl, function(data) {
+                                var items = [];
+
+                                $.each(data.groups, function(key, val) {
+                                        items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + " " + data.groups[key].group_id + '</option>');
+                                });
+
+                                // Create selectable list and add button to initiate a new call to purple pal
+
+                                $('<select/>', {
+                                    'class': 'zulot',
+                                    html: items.join('')
+                                }).appendTo('body');
+
+                            });
+                        });
+                    }
+                })
+                document.getElementById('auth-loggedout').style.display = 'none';
+                document.getElementById('auth-loggedin').style.display = 'block';
+            } else {
+                // user has not auth'd your app, or is not logged into Facebook
+                document.getElementById('auth-loggedout').style.display = 'block';
+                document.getElementById('auth-loggedin').style.display = 'none';
+            }
+        });
+
+        // respond to clicks on the login and logout links
+        document.getElementById('auth-loginlink').addEventListener('click', function(){
+            FB.login();
+        });
+        document.getElementById('auth-logoutlink').addEventListener('click', function(){
+            FB.logout();
+        }); 
+    } 
     // TODO uncomment
-    createNewPhono();
+    //createNewPhono();
      
 });
 
