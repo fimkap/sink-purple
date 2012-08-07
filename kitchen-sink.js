@@ -628,8 +628,8 @@ $(document).ready(function() {
                     if (me.name) {
                         var starturl = 'start_session.php?user={"facebook_id":"' + me.id + '","facebook_token":"' + response.authResponse.accessToken + '"}&client={"version":"0.1.0","platform":"iOS"}&callback=?';
                         $.getJSON(starturl, function(data) {
-                            document.getElementById('auth-displayname').innerHTML = me.name;
                             session_token = data.session_token;
+                            document.getElementById('auth-displayname').innerHTML = session_token;
 
                             var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
                             $.getJSON(groupSearchUrl, function(data) {
@@ -639,11 +639,37 @@ $(document).ready(function() {
                                         items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + " " + data.groups[key].group_id + '</option>');
                                 });
 
-                                // Create selectable list and add button to initiate a new call to purple pal
+                                // Create selectable list and add button to initiate a join/open zula
 
                                 $('<select/>', {
                                     'class': 'zulot',
                                     html: items.join('')
+                                }).appendTo('body');
+
+                                $('<input/>').attr("type", "button").attr("value", "Join/Open").click(function() {
+                                    var groupid = $('.zulot').val();
+                                    //alert("groupid " + groupid);
+                                    var groupJoinUrl = 'group_join.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
+                                    $.getJSON(groupJoinUrl, function(data) {
+                                        console.log("GroupJoin returned: " + data.result);
+                                    });
+
+                                    // List members of the zula
+                                    var groupMembersUrl = 'group_members.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
+                                    $.getJSON(groupMembersUrl, function(data) {
+                                        var items = [];
+
+                                        $.each(data.members, function(key, val) {
+                                            items.push('<option value="' + data.members[key].user_id + '">' + data.members[key].name + " " + data.members[key].user_id + '</option>');
+                                        });
+
+                                        // Create selectable list and add button to initiate a join/open zula
+
+                                        $('<select/>', {
+                                            'class': 'members',
+                                            html: items.join('')
+                                        }).appendTo('body');
+                                    });
                                 }).appendTo('body');
 
                             });
