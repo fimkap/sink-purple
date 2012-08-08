@@ -58,24 +58,24 @@ $(document).ready(function() {
         if (urlParam("dev") != undefined) { 
             devenv = urlParam("dev");
         } else {
-            devenv = 0;
+            devenv = 1;
         }
         
         if (devenv == "1") {
             // Use PurpleDev Tropo app which points to purple-dev server
             appdialstring = "sip:9996143702@sip.tropo.com";
-            if (purpleuser == "efim")
-                session_token = "uFckDPDJbrnQjEy:web:0.0.0:1348826783.05:XOxJH78TgX:23f871bb3dfdd04075a4e785b3f7da799d23d1f8";
-            else
-                session_token = "upr5T5AgdlOlgIg:web:0.0.0:1348826883.58:8lsT2IFTbo:f1f2157084dc8496b07c80a49fddea7725650e53";
+            //if (purpleuser == "efim")
+            //    session_token = "uFckDPDJbrnQjEy:web:0.0.0:1348826783.05:XOxJH78TgX:23f871bb3dfdd04075a4e785b3f7da799d23d1f8";
+            //else
+            //    session_token = "upr5T5AgdlOlgIg:web:0.0.0:1348826883.58:8lsT2IFTbo:f1f2157084dc8496b07c80a49fddea7725650e53";
         }
 
         console.log("audioType = " + audioType);
         console.log("dialString = " + dialString);
         console.log("charString = " + chatString);
 
-	newPhonoDiv.attr("id",newPhonoID).appendTo('.phonoHldr').show();
-	newPhonoDiv.find(".phonoID").text(newPhonoID+":");
+        newPhonoDiv.attr("id",newPhonoID).appendTo('.phonoHldr').show();
+        newPhonoDiv.find(".phonoID").text(newPhonoID+":");
         newPhonoDiv.find(".audioType").text(audioType);
         newPhonoDiv.find(".callTo").val(dialString);
         newPhonoDiv.find(".chatTo").val(chatString);
@@ -128,43 +128,109 @@ $(document).ready(function() {
                     });
                 }
                 else {
+
                     // Register SID on purple-dev backend server
                     var registerUrl = 'tropo_register_sid.php?session_token=' + session_token + '&device_id=iphone2&sid=' + this.sessionId + '&callback=?';
                     $.getJSON(registerUrl, function(data) {
                         console.log("tropo_register_sid returned: " + data.return_code);
                     });
-
-                    // Call purpel-dev backend server to download contacts
-                    var contactsUrl = 'download_contacts.php?session_token=' + session_token + '&since=0.0&from=&max_results=0&callback=?';
-                    $.getJSON(contactsUrl, function(data) {
+                
+                    var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
+                    $.getJSON(groupSearchUrl, function(data) {
                         var items = [];
 
-                        $.each(data.contacts, function(key, val) {
-                            $.each(data.contacts[key].handles, function(key2) {
-                                var chandle = data.contacts[key].handles[key2];
-                                if (chandle.indexOf("pp:") == 0) {
-                                    items.push('<option value="' + chandle + '">' + data.contacts[key].name + " " + chandle + '</option>');
-                                }
-                            });
+                        $.each(data.groups, function(key, val) {
+                            //items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + " " + data.groups[key].group_id + '</option>');
+                            items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + '</option>');
                         });
 
-                        // Create selectable list and add button to initiate a new call to purple pal
+                        // Create selectable list and add button to initiate a join/open zula
 
                         $('<select/>', {
-                            'class': 'my-new-list',
+                            'class': 'zulot',
                             html: items.join('')
                         }).appendTo('.phonoHldr');
 
-                        $('<input/>').attr("type", "button").attr("value", "Call").click(function() {
-                            var ppid = $('.my-new-list').val();
-                            //alert("ppid " + ppid);
-                            //var thisPhono = $(this).closest(".phono").attr("id");
-                            //alert("p1: " + newPhonoID);
-                            createNewCall(newPhonoID, appdialstring, ppid.substring(3));
+                        $('<input/>').attr("type", "button").attr("value", "Join/Open").click(function() {
+                            var groupid = $('.zulot').val();
+                            //alert("groupid " + groupid);
+                            var groupJoinUrl = 'group_join.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
+                            $.getJSON(groupJoinUrl, function(data) {
+                                console.log("GroupJoin returned: " + data.result);
+                            });
+
+                            // Set incoming calls and text msg to true
+                            var memberSettingsUrl = 'group_member_settings.php?session_token=' + session_token + '&group_id=' + groupid + '&settings={"allow_incoming_calls":true,"allow_incoming_text":true}&callback=?';
+                            $.getJSON(memberSettingsUrl, function(data) {
+                                console.log("GroupMemberSettings returned: " + data.result);
+                            });
+
+                            // List members of the zula
+                            var groupMembersUrl = 'group_members.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
+                            $.getJSON(groupMembersUrl, function(data) {
+                                var items = [];
+
+                                $.each(data.members, function(key, val) {
+                                    //items.push('<option value="' + data.members[key].user_id + '">' + data.members[key].name + " " + data.members[key].user_id + '</option>');
+                                    items.push('<option value="' + data.members[key].user_id + '">' + data.members[key].name + '</option>');
+                                });
+
+                                // Create selectable list and add button to initiate a join/open zula
+
+                                $('<select/>', {
+                                    'class': 'members',
+                                    html: items.join('')
+                                }).appendTo('.phonoHldr');
+                                
+                                $('<input/>').attr("type", "button").attr("value", "Call").click(function() {
+                                    var userid = $('.members').val();
+                                    //alert("userid " + userid);
+                                    createNewCall(newPhonoID, appdialstring, userid, groupid);
+                                }).appendTo('.phonoHldr');
+                
+                            });
                         }).appendTo('.phonoHldr');
 
                     });
                 }
+                //else {
+                //    // Register SID on purple-dev backend server
+                //    var registerUrl = 'tropo_register_sid.php?session_token=' + session_token + '&device_id=iphone2&sid=' + this.sessionId + '&callback=?';
+                //    $.getJSON(registerUrl, function(data) {
+                //        console.log("tropo_register_sid returned: " + data.return_code);
+                //    });
+
+                //    // Call purpel-dev backend server to download contacts
+                //    var contactsUrl = 'download_contacts.php?session_token=' + session_token + '&since=0.0&from=&max_results=0&callback=?';
+                //    $.getJSON(contactsUrl, function(data) {
+                //        var items = [];
+
+                //        $.each(data.contacts, function(key, val) {
+                //            $.each(data.contacts[key].handles, function(key2) {
+                //                var chandle = data.contacts[key].handles[key2];
+                //                if (chandle.indexOf("pp:") == 0) {
+                //                    items.push('<option value="' + chandle + '">' + data.contacts[key].name + " " + chandle + '</option>');
+                //                }
+                //            });
+                //        });
+
+                //        // Create selectable list and add button to initiate a new call to purple pal
+
+                //        $('<select/>', {
+                //            'class': 'my-new-list',
+                //            html: items.join('')
+                //        }).appendTo('.phonoHldr');
+
+                //        $('<input/>').attr("type", "button").attr("value", "Call").click(function() {
+                //            var ppid = $('.my-new-list').val();
+                //            //alert("ppid " + ppid);
+                //            //var thisPhono = $(this).closest(".phono").attr("id");
+                //            //alert("p1: " + newPhonoID);
+                //            createNewCall(newPhonoID, appdialstring, ppid.substring(3));
+                //        }).appendTo('.phonoHldr');
+
+                //    });
+                //}
 
                 if (this.audio.audioInDevices){
                     var inList = this.audio.audioInDevices();
@@ -260,7 +326,7 @@ $(document).ready(function() {
     }
     
     //Creates a new call
-    function createNewCall(phonoID, to, purplepal){
+    function createNewCall(phonoID, to, purplepal, groupid){
 	//clone a call box
 	var phonoDiv = $("#"+phonoID);
 	
@@ -279,6 +345,10 @@ $(document).ready(function() {
         {
             name:"x-pp-dest-user-id",
             value: purplepal
+        },
+        {
+            name:"x-pp-group-id",
+            value: groupid
         },
         {
             name:"x-pp-session-token",
@@ -458,7 +528,7 @@ $(document).ready(function() {
 	//var callTo = $.trim($("#"+thisPhono).find(".callTo").val());
 	var purplepal = $.trim($("#"+thisPhono).find(".callTo").val());
     //alert("id " + thisPhono + "callto " + appdialstring + "pal " + purplepal);
-	createNewCall(thisPhono, appdialstring, purplepal);
+	createNewCall(thisPhono, appdialstring, purplepal, 0);
     });
     
     $('.headset').live('change', function() {
@@ -629,50 +699,51 @@ $(document).ready(function() {
                         var starturl = 'start_session.php?user={"facebook_id":"' + me.id + '","facebook_token":"' + response.authResponse.accessToken + '"}&client={"version":"0.1.0","platform":"iOS"}&callback=?';
                         $.getJSON(starturl, function(data) {
                             session_token = data.session_token;
-                            document.getElementById('auth-displayname').innerHTML = session_token;
+                            console.log("Purple session_token: " + session_token);
+                            document.getElementById('auth-displayname').innerHTML = me.name;
 
-                            var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
-                            $.getJSON(groupSearchUrl, function(data) {
-                                var items = [];
+                            //var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
+                            //$.getJSON(groupSearchUrl, function(data) {
+                            //    var items = [];
 
-                                $.each(data.groups, function(key, val) {
-                                        items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + " " + data.groups[key].group_id + '</option>');
-                                });
+                            //    $.each(data.groups, function(key, val) {
+                            //            items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + " " + data.groups[key].group_id + '</option>');
+                            //    });
 
-                                // Create selectable list and add button to initiate a join/open zula
+                            //    // Create selectable list and add button to initiate a join/open zula
 
-                                $('<select/>', {
-                                    'class': 'zulot',
-                                    html: items.join('')
-                                }).appendTo('body');
+                            //    $('<select/>', {
+                            //        'class': 'zulot',
+                            //        html: items.join('')
+                            //    }).appendTo('body');
 
-                                $('<input/>').attr("type", "button").attr("value", "Join/Open").click(function() {
-                                    var groupid = $('.zulot').val();
-                                    //alert("groupid " + groupid);
-                                    var groupJoinUrl = 'group_join.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
-                                    $.getJSON(groupJoinUrl, function(data) {
-                                        console.log("GroupJoin returned: " + data.result);
-                                    });
+                            //    $('<input/>').attr("type", "button").attr("value", "Join/Open").click(function() {
+                            //        var groupid = $('.zulot').val();
+                            //        //alert("groupid " + groupid);
+                            //        var groupJoinUrl = 'group_join.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
+                            //        $.getJSON(groupJoinUrl, function(data) {
+                            //            console.log("GroupJoin returned: " + data.result);
+                            //        });
 
-                                    // List members of the zula
-                                    var groupMembersUrl = 'group_members.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
-                                    $.getJSON(groupMembersUrl, function(data) {
-                                        var items = [];
+                            //        // List members of the zula
+                            //        var groupMembersUrl = 'group_members.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
+                            //        $.getJSON(groupMembersUrl, function(data) {
+                            //            var items = [];
 
-                                        $.each(data.members, function(key, val) {
-                                            items.push('<option value="' + data.members[key].user_id + '">' + data.members[key].name + " " + data.members[key].user_id + '</option>');
-                                        });
+                            //            $.each(data.members, function(key, val) {
+                            //                items.push('<option value="' + data.members[key].user_id + '">' + data.members[key].name + " " + data.members[key].user_id + '</option>');
+                            //            });
 
-                                        // Create selectable list and add button to initiate a join/open zula
+                            //            // Create selectable list and add button to initiate a join/open zula
 
-                                        $('<select/>', {
-                                            'class': 'members',
-                                            html: items.join('')
-                                        }).appendTo('body');
-                                    });
-                                }).appendTo('body');
+                            //            $('<select/>', {
+                            //                'class': 'members',
+                            //                html: items.join('')
+                            //            }).appendTo('body');
+                            //        });
+                            //    }).appendTo('body');
 
-                            });
+                            //});
                         });
                     }
                 })
