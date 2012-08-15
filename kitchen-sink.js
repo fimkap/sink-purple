@@ -1,9 +1,11 @@
 /* Kitchen Sink */
 $(document).ready(function() {
     /* use code like this to sepcifiy a particular codec. */
-     Phono.util.filterWideband = function(offer, wideband) {
+    Phono.util.filterWideband = function(offer, wideband) {
+        console.log("Filter wideband");
         var codecs = new Array();
         Phono.util.each(offer, function() {
+            console.log("Codecs: " + this.name.toUpperCase());
             if (!wideband) {
                 if (this.name.toUpperCase() == "G722" && this.rate == "8000") {
                     codecs.push(this);
@@ -62,6 +64,7 @@ $(document).ready(function() {
         }
         
         if (devenv == "1") {
+            console.log("Tropo app for devenv");
             // Use PurpleDev Tropo app which points to purple-dev server
             appdialstring = "sip:9996143702@sip.tropo.com";
             //if (purpleuser == "efim")
@@ -112,6 +115,7 @@ $(document).ready(function() {
                 newPhonoDiv.find(".phoneControl").show();
 
                 if (devenv == 0) {
+                    console.log("No devenv");
                     // Call backend server to sign in
                     var signinUrl = 'index.php?name=' + purpleuser + '&sid=' + this.sessionId + '&callback=?';
                     $.getJSON(signinUrl, function(data) {
@@ -670,6 +674,8 @@ $(document).ready(function() {
 
 
     // FB login and Zulot list
+    if (urlParam("dev") == undefined) { 
+                    console.log("It is devenv");
 
     // Load the SDK Asynchronously
     (function(d){
@@ -764,6 +770,7 @@ $(document).ready(function() {
             FB.logout();
         }); 
     } 
+    } // test
     // TODO uncomment
     //createNewPhono();
      
