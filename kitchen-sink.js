@@ -23,11 +23,33 @@ $(document).ready(function() {
     var phonos={}, calls={}, chats={};
     var appdialstring = "sip:9990081544@sip.tropo.com";
     var session_token = "";
+    var devenv = "0";
     
     function urlParam(name){
 	var results = new RegExp('[\\?&]' + name + '=([^&#]*)').exec(window.location.href);
 	if (!results) { return undefined; }
 	return results[1] || undefined;
+    }
+
+    function createNewPhono2(){
+        var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
+        $.getJSON(groupSearchUrl, function(data) {
+            var items = [];
+
+            $.each(data.groups, function(key, val) {
+                var groupid = data.groups[key].group_id;
+                var picurl = data.groups[key].picture_url;
+                console.log("pic url: " + picurl);
+                if (picurl.length == 0) {
+                    picurl = "default.jpg";
+                }
+                items.push('<li><a href="javascript:DisplayGroup(\x27' + groupid + '\x27);" title="' + data.groups[key].name + '"><img src="' + picurl + '"/></a></li>');
+            });
+
+            // Create selectable list and add button to initiate a join/open zula
+            console.log("list len: " + items.length);
+            $('.grid-list').html(items.join(' '));
+        });
     }
 
     function createNewPhono(){
@@ -59,11 +81,9 @@ $(document).ready(function() {
         // Which env - my local or purple-dev?
         if (urlParam("dev") != undefined) { 
             devenv = urlParam("dev");
-        } else {
-            devenv = 1;
         }
         
-        if (devenv == "1") {
+        if (devenv != "0") {
             console.log("Tropo app for devenv");
             // Use PurpleDev Tropo app which points to purple-dev server
             appdialstring = "sip:9996143702@sip.tropo.com";
@@ -114,7 +134,7 @@ $(document).ready(function() {
                                                     + this.sessionId + "</a>");
                 newPhonoDiv.find(".phoneControl").show();
 
-                if (devenv == 0) {
+                if (devenv == "0") {
                     console.log("No devenv");
                     // Call backend server to sign in
                     var signinUrl = 'index.php?name=' + purpleuser + '&sid=' + this.sessionId + '&callback=?';
@@ -131,8 +151,7 @@ $(document).ready(function() {
                         }).appendTo('body');
                     });
                 }
-                else {
-
+                else if (devenv == "1") { // primitive UI
                     // Register SID on purple-dev backend server
                     var registerUrl = 'tropo_register_sid.php?session_token=' + session_token + '&device_id=iphone2&sid=' + this.sessionId + '&callback=?';
                     $.getJSON(registerUrl, function(data) {
@@ -142,14 +161,12 @@ $(document).ready(function() {
                     var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
                     $.getJSON(groupSearchUrl, function(data) {
                         var items = [];
-
                         $.each(data.groups, function(key, val) {
                             //items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + " " + data.groups[key].group_id + '</option>');
                             items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + '</option>');
                         });
 
                         // Create selectable list and add button to initiate a join/open zula
-
                         $('<select/>', {
                             'class': 'zulot',
                             html: items.join('')
@@ -197,44 +214,41 @@ $(document).ready(function() {
 
                     });
                 }
-                //else {
-                //    // Register SID on purple-dev backend server
-                //    var registerUrl = 'tropo_register_sid.php?session_token=' + session_token + '&device_id=iphone2&sid=' + this.sessionId + '&callback=?';
-                //    $.getJSON(registerUrl, function(data) {
-                //        console.log("tropo_register_sid returned: " + data.return_code);
-                //    });
+                else { // grid UI
+                    //$('<p>Test</p>').appendTo('.ri-grid');
 
-                //    // Call purpel-dev backend server to download contacts
-                //    var contactsUrl = 'download_contacts.php?session_token=' + session_token + '&since=0.0&from=&max_results=0&callback=?';
-                //    $.getJSON(contactsUrl, function(data) {
-                //        var items = [];
+                    //createNewPhono2();
+                    // Register SID on purple-dev backend server
+                    var registerUrl = 'tropo_register_sid.php?session_token=' + session_token + '&device_id=iphone2&sid=' + this.sessionId + '&callback=?';
+                    $.getJSON(registerUrl, function(data) {
+                        console.log("tropo_register_sid returned: " + data.return_code);
+                    });
+                
+                    //var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
+                    //$.getJSON(groupSearchUrl, function(data) {
+                    //    var items = [];
 
-                //        $.each(data.contacts, function(key, val) {
-                //            $.each(data.contacts[key].handles, function(key2) {
-                //                var chandle = data.contacts[key].handles[key2];
-                //                if (chandle.indexOf("pp:") == 0) {
-                //                    items.push('<option value="' + chandle + '">' + data.contacts[key].name + " " + chandle + '</option>');
-                //                }
-                //            });
-                //        });
+                    //    $.each(data.groups, function(key, val) {
+                    //        var groupid = data.groups[key].group_id;
+                    //        var picurl = data.groups[key].picture_url;
+                    //        console.log("pic url: " + picurl);
+                    //        if (picurl.length == 0) {
+                    //            picurl = "default.jpg";
+                    //        }
+                    //        items.push('<li><a href="javascript:DisplayGroup(\x27' + groupid + '\x27);" title="' + data.groups[key].name + '"><img src="' + picurl + '"/></a></li>');
+                    //    });
 
-                //        // Create selectable list and add button to initiate a new call to purple pal
+                        // Create selectable list and add button to initiate a join/open zula
+                        //console.log("list len: " + items.length);
+                        //$('.grid-list').html(items.join(' '));
+                        //$('<ul/>', {
+                        //    'id': 'list-grid-id',
+                        //    'class': 'list-grid',
+                        //    html: items.join('')
+                        //}).appendTo('.ri-grid');
+                    //});
 
-                //        $('<select/>', {
-                //            'class': 'my-new-list',
-                //            html: items.join('')
-                //        }).appendTo('.phonoHldr');
-
-                //        $('<input/>').attr("type", "button").attr("value", "Call").click(function() {
-                //            var ppid = $('.my-new-list').val();
-                //            //alert("ppid " + ppid);
-                //            //var thisPhono = $(this).closest(".phono").attr("id");
-                //            //alert("p1: " + newPhonoID);
-                //            createNewCall(newPhonoID, appdialstring, ppid.substring(3));
-                //        }).appendTo('.phonoHldr');
-
-                //    });
-                //}
+                }
 
                 if (this.audio.audioInDevices){
                     var inList = this.audio.audioInDevices();
@@ -329,6 +343,52 @@ $(document).ready(function() {
         });
     }
     
+
+    function DisplayGroup(groupid) {
+        console.log("Display Group: " + groupid);
+        var groupJoinUrl = 'group_join.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
+        $.getJSON(groupJoinUrl, function(data) {
+            console.log("GroupJoin returned: " + data.result);
+        });
+
+        // Set incoming calls and text msg to true
+        var memberSettingsUrl = 'group_member_settings.php?session_token=' + session_token + '&group_id=' + groupid + '&settings={"allow_incoming_calls":true,"allow_incoming_text":true}&callback=?';
+        $.getJSON(memberSettingsUrl, function(data) {
+            console.log("GroupMemberSettings returned: " + data.result);
+        });
+
+        // List members of the zula
+        var groupMembersUrl = 'group_members.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
+        $.getJSON(groupMembersUrl, function(data) {
+            var items = [];
+
+            $.each(data.members, function(key, val) {
+                var userid = data.members[key].user_id;
+                console.log("User: " + userid);
+                items.push('<li><a href="javascript:CallMember(\x27' + userid + '\x27,\x27' + groupid + '\x27);" title="' + data.members[key].name + '"><img src="efim_fb.jpg"/></a></li>');
+            });
+
+            var offset = 8 - items.length;
+            for (;offset > 0; offset--) {
+                items.push('<li><a href=#><img src="Purple-Face.jpg"/></a></li>');
+            }
+
+            $('.grid-list2').html(items.join(' '));
+            //$('.ri2-grid').append($('<ul/>', {
+            //    'class': 'members',
+            //    html: items.join('')
+            //}));
+        });
+
+    }
+
+    function CallMember(userid, groupid) {
+        console.log("Call " + userid + "gid: " + groupid);
+        var phonoCtr = ($(".phono").size() + 1) - 1;
+        var newPhonoID = "Phono" + phonoCtr;
+        createNewCall(newPhonoID, appdialstring, userid, groupid);
+    }
+
     //Creates a new call
     function createNewCall(phonoID, to, purplepal, groupid){
 	//clone a call box
@@ -674,8 +734,8 @@ $(document).ready(function() {
 
 
     // FB login and Zulot list
-    if (urlParam("dev") == undefined) { 
-                    console.log("It is devenv");
+    if (urlParam("dev") != undefined) { 
+        console.log("It is devenv");
 
     // Load the SDK Asynchronously
     (function(d){
@@ -702,55 +762,16 @@ $(document).ready(function() {
                 // user has auth'd your app and is logged into Facebook
                 FB.api('/me', function(me){
                     if (me.name) {
-                        var starturl = 'start_session.php?user={"facebook_id":"' + me.id + '","facebook_token":"' + response.authResponse.accessToken + '"}&client={"version":"0.1.0","platform":"iOS"}&callback=?';
+                        var starturl = 'start_session.php?user={"facebook_id":"' + me.id + '","facebook_token":"' + response.authResponse.accessToken + '"}&client={"version":"0.1.0","platform":"web"}&callback=?';
                         $.getJSON(starturl, function(data) {
                             session_token = data.session_token;
                             console.log("Purple session_token: " + session_token);
                             document.getElementById('auth-displayname').innerHTML = me.name;
 
-                            //var groupSearchUrl = 'group_search.php?session_token=' + session_token + '&callback=?';
-                            //$.getJSON(groupSearchUrl, function(data) {
-                            //    var items = [];
-
-                            //    $.each(data.groups, function(key, val) {
-                            //            items.push('<option value="' + data.groups[key].group_id + '">' + data.groups[key].name + " " + data.groups[key].group_id + '</option>');
-                            //    });
-
-                            //    // Create selectable list and add button to initiate a join/open zula
-
-                            //    $('<select/>', {
-                            //        'class': 'zulot',
-                            //        html: items.join('')
-                            //    }).appendTo('body');
-
-                            //    $('<input/>').attr("type", "button").attr("value", "Join/Open").click(function() {
-                            //        var groupid = $('.zulot').val();
-                            //        //alert("groupid " + groupid);
-                            //        var groupJoinUrl = 'group_join.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
-                            //        $.getJSON(groupJoinUrl, function(data) {
-                            //            console.log("GroupJoin returned: " + data.result);
-                            //        });
-
-                            //        // List members of the zula
-                            //        var groupMembersUrl = 'group_members.php?session_token=' + session_token + '&group_id=' + groupid + '&callback=?';
-                            //        $.getJSON(groupMembersUrl, function(data) {
-                            //            var items = [];
-
-                            //            $.each(data.members, function(key, val) {
-                            //                items.push('<option value="' + data.members[key].user_id + '">' + data.members[key].name + " " + data.members[key].user_id + '</option>');
-                            //            });
-
-                            //            // Create selectable list and add button to initiate a join/open zula
-
-                            //            $('<select/>', {
-                            //                'class': 'members',
-                            //                html: items.join('')
-                            //            }).appendTo('body');
-                            //        });
-                            //    }).appendTo('body');
-
-                            //});
                         });
+
+                        //createNewPhono2();
+                        //createNewPhono();
                     }
                 })
                 document.getElementById('auth-loggedout').style.display = 'none';
@@ -772,7 +793,8 @@ $(document).ready(function() {
     } 
     } // test
     // TODO uncomment
-    //createNewPhono();
+    createNewPhono2();
+    createNewPhono();
      
 });
 
